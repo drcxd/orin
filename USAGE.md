@@ -114,7 +114,7 @@ Search keywords: emacs configuration [preview updates as you type]
 
 ### Modern Mode
 
-Modern mode integrates with vertico and consult for a more streamlined interface.
+Modern mode integrates with vertico for a more streamlined interface.
 
 **Enable modern mode:**
 ```elisp
@@ -123,29 +123,32 @@ Modern mode integrates with vertico and consult for a more streamlined interface
 
 **Prerequisites:**
 - vertico package installed
-- consult package installed
 
 **Features:**
+- **Dynamic completion**: Results update as you type
 - **Vertico integration**: Results appear in the vertico completion list
 - **Grouped display**: Results grouped by file, same as classic mode
-- **Hover preview**: Preview buffer shows when hovering over entries
+- **Live preview**: Preview buffer shows in a side window for the highlighted entry
+- **Search mode toggle**: Press `C-c C-o` to toggle between OR/AND modes with instant updates
 - **Familiar interface**: Uses vertico's standard navigation
 
 **Workflow:**
 
 1. Run `M-x orin`
-2. Type keywords in the minibuffer
+2. Type keywords in the minibuffer - results update dynamically as you type
 3. Results appear in vertico completion list (grouped by file)
 4. Use `C-n`/`C-p` or arrow keys to navigate
-5. Preview buffer updates automatically for the highlighted entry
-6. Press `RET` to open the selected match
-7. Press `C-g` to cancel and close preview
+5. Preview buffer updates automatically for the highlighted entry in a side window
+6. Press `C-c C-o` to toggle between OR/AND search modes
+7. Press `RET` to open the selected match at the correct line
+8. Press `C-g` to cancel and close preview
 
 **Example:**
 ```
 M-x orin RET
-Search keywords: project ideas [results appear in vertico]
+Search keywords: project ideas [results appear in vertico as you type]
 [Navigate with C-n/C-p, preview updates automatically]
+[Press C-c C-o to toggle OR/AND mode - results update instantly]
 [Press RET to open selected match]
 ```
 
@@ -179,6 +182,10 @@ Does NOT match: "emacs is great" (missing "lisp")
 While typing keywords in the minibuffer, press **`C-c C-o`** to toggle between OR and AND modes.
 
 A message will appear: `Search mode: OR` or `Search mode: AND`
+
+**Behavior by mode:**
+- **Classic mode**: Preview buffer updates after the debounce delay
+- **Modern mode**: Results update instantly in the vertico completion list
 
 ## Navigation
 
@@ -503,17 +510,14 @@ Or set the full path:
 (setq orin-ripgrep-executable "/usr/local/bin/rg")
 ```
 
-### "Modern mode requires consult package"
+### "Modern mode not working" or errors about vertico
 
-Install vertico and consult:
+Modern mode requires vertico to be installed and enabled. Install vertico:
 ```elisp
 (use-package vertico
   :ensure t
   :init
   (vertico-mode))
-
-(use-package consult
-  :ensure t)
 ```
 
 Or switch to classic mode:

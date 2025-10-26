@@ -82,22 +82,19 @@ preview buffer updates to show the file content at the selected match
 location. This allows users to browse results without leaving the
 minibuffer or switching windows.
 
-### Integration with vertico and consult
+### Integration with vertico
 
 What we have described above is called the classic operating mode of
 the package. The user can use a variable to switch to another
-operating mode using vertico and consult. Their code is located at
-`~/.emacs.d/elpaca/repos/vertico` and
-`~/.emacs.d/elpaca/repos/consult`. You can only read these code but
-not modify them. This operating mode is called the modern mode.
+operating mode using vertico. This operating mode is called the modern mode.
 
 In the modern mode, when the user is inputting keywords, the searching
-results are not previewed in a dedicated buffer but using vertico. In
-vertico, matching results are still grouped using the same pattern
-used by the result buffer. When any entry in the vertico list is
-highlighted, open the matching preview buffer for that entry in a new
-window. When the user presses enter upon any entry, open the file of
-the matching result in its own buffer in a new window, and quit the
-searching process. Pressing `C-g` in vertico also quit the searching
-process, and closes the window displaying the matching preview buffer
-as well.
+results are displayed using vertico's completion interface with dynamic
+updates as you type. Matching results are grouped by file using the same
+pattern as the result buffer. When any entry in the vertico list is
+highlighted, a matching preview buffer opens for that entry in a side
+window (split vertically). When the user presses enter on any entry,
+the file opens at the matching line in a new window. Pressing `C-g` in
+vertico cancels the search and closes the preview window. The user can
+press `C-c C-o` while typing to toggle between OR and AND search modes,
+and the results update immediately.

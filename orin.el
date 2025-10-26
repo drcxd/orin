@@ -11,8 +11,18 @@
 ;;; Commentary:
 
 ;; orin (ORg INsight) helps you search information in .org files using
-;; ripgrep. It provides two operating modes: classic mode with dedicated
-;; buffers, and modern mode integrated with vertico.
+;; ripgrep. It provides two operating modes:
+;;
+;; - Classic mode: Uses dedicated buffers with live preview while typing
+;; - Modern mode: Integrated with vertico for dynamic completion
+;;
+;; Features:
+;; - Fast ripgrep-based searching
+;; - OR/AND search modes (toggle with C-c C-o)
+;; - Live preview of search results
+;; - Group results by file with #+title: extraction
+;; - Navigate between matches and groups
+;; - Preview files with keyword highlighting
 
 ;;; Code:
 
@@ -91,9 +101,6 @@ This prevents searching on every keystroke for better performance."
 
 (defvar orin--dynamic-last-mode nil
   "Last search mode used for dynamic completion.")
-
-(defvar orin--force-refresh nil
-  "Flag to force refresh of completion candidates even if input unchanged.")
 
 ;;; Utility Functions
 
@@ -519,9 +526,6 @@ Also updates the file preview window."
 
 ;;; Modern Mode Implementation (vertico integration)
 
-(defvar orin--modern-preview-overlay nil
-  "Overlay for showing preview in modern mode.")
-
 (declare-function vertico--candidate "ext:vertico")
 (defvar vertico--input)
 (defvar vertico--candidates)
@@ -561,16 +565,14 @@ Return group title for CAND or TRANSFORM the candidate."
             (if (eq action 'metadata)
                 '(metadata (category . orin-match)
                           (group-function . orin--group-function))
-              ;; Update candidates when input changes, mode changes, or force-refresh is set
+              ;; Update candidates when input or mode changes
               (let ((keywords (split-string string nil t)))
                 (when (and keywords
-                          (or orin--force-refresh
-                              (not (equal string orin--dynamic-last-input))
+                          (or (not (equal string orin--dynamic-last-input))
                               (not (eq orin--search-mode orin--dynamic-last-mode))))
                   (setq orin--dynamic-last-input string)
                   (setq orin--dynamic-last-mode orin--search-mode)
                   (setq orin--current-keywords keywords)
-                  (setq orin--force-refresh nil)  ; Clear the flag after using it
                   (let* ((results (orin--run-ripgrep keywords orin--search-mode))
                          (groups (orin--group-results results))
                          (candidates '()))
@@ -610,7 +612,6 @@ Return group title for CAND or TRANSFORM the candidate."
     (setq orin--dynamic-last-input nil)
     (setq orin--dynamic-last-mode nil)
     (setq orin--dynamic-candidates nil)
-    (setq orin--force-refresh nil)
 
     (unwind-protect
         (progn
