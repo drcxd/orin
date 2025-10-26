@@ -224,7 +224,8 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
     (while (and (not (eobp))
                 (not (get-text-property (point) 'orin-match)))
       (forward-line 1))
-    (when (eobp)
+    (if (get-text-property (point) 'orin-match)
+        t
       (goto-char pos)
       nil)))
 
@@ -234,21 +235,28 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
     (while (and (not (bobp))
                 (not (get-text-property (point) 'orin-match)))
       (forward-line -1))
-    (when (bobp)
+    (if (get-text-property (point) 'orin-match)
+        t
       (goto-char pos)
       nil)))
 
 (defun orin-next-match ()
   "Move to the next match in the result buffer."
   (interactive)
-  (forward-line 1)
-  (orin--goto-next-match))
+  (let ((start-pos (point)))
+    (forward-line 1)
+    (unless (orin--goto-next-match)
+      ;; No next match found, go back to start
+      (goto-char start-pos))))
 
 (defun orin-previous-match ()
   "Move to the previous match in the result buffer."
   (interactive)
-  (forward-line -1)
-  (orin--goto-previous-match))
+  (let ((start-pos (point)))
+    (forward-line -1)
+    (unless (orin--goto-previous-match)
+      ;; No previous match found, go back to start
+      (goto-char start-pos))))
 
 (defun orin-next-group ()
   "Move to the first match of the next group."
@@ -366,6 +374,12 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
   (let ((map (make-sparse-keymap)))
     (set-keymap-parent map minibuffer-local-map)
     (define-key map (kbd "C-c C-o") 'orin-toggle-search-mode)
+    (define-key map (kbd "C-n") 'orin-preview-next-match)
+    (define-key map (kbd "C-p") 'orin-preview-previous-match)
+    (define-key map (kbd "M-n") 'orin-preview-next-match)
+    (define-key map (kbd "M-p") 'orin-preview-previous-match)
+    (define-key map (kbd "<C-down>") 'orin-preview-next-match)
+    (define-key map (kbd "<C-up>") 'orin-preview-previous-match)
     map)
   "Keymap for orin minibuffer.")
 
@@ -375,6 +389,31 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
   (setq orin--search-mode (if (eq orin--search-mode 'or) 'and 'or))
   (message "Search mode: %s" (upcase (symbol-name orin--search-mode)))
   (orin--schedule-preview-update))
+
+(defun orin-preview-next-match ()
+  "Move to next match in preview results buffer from minibuffer."
+  (interactive)
+  (orin--navigate-preview-buffer 'next))
+
+(defun orin-preview-previous-match ()
+  "Move to previous match in preview results buffer from minibuffer."
+  (interactive)
+  (orin--navigate-preview-buffer 'previous))
+
+(defun orin--navigate-preview-buffer (direction)
+  "Navigate preview results buffer in DIRECTION (\\='next or \\='previous).
+Also updates the file preview window."
+  (let ((preview-buffer (get-buffer "*orin-preview-results*")))
+    (when (and preview-buffer
+               (window-live-p orin--result-window))
+      (save-selected-window
+        (select-window orin--result-window)
+        (switch-to-buffer preview-buffer)
+        (if (eq direction 'next)
+            (orin-next-match)
+          (orin-previous-match))
+        ;; Update the file preview
+        (orin--update-preview)))))
 
 (defun orin--schedule-preview-update ()
   "Schedule a preview update after debounce delay."
@@ -399,7 +438,14 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
               (setq orin--result-window
                     (display-buffer preview-buffer
                                   '((display-buffer-at-bottom)
-                                    (window-height . 0.5)))))))
+                                    (window-height . 0.5)))))
+
+            ;; Show preview for the first match
+            (when results
+              (with-current-buffer preview-buffer
+                (let ((first-match (get-text-property (point) 'orin-match)))
+                  (when first-match
+                    (orin--show-preview first-match)))))))
       ;; If no keywords, clear the preview buffer but keep window
       (when (get-buffer "*orin-preview-results*")
         (with-current-buffer "*orin-preview-results*"
@@ -409,6 +455,12 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
 
 (defun orin--minibuffer-setup ()
   "Setup function for minibuffer."
+  ;; Bind keys directly in the minibuffer
+  (local-set-key (kbd "C-c C-o") 'orin-toggle-search-mode)
+  (local-set-key (kbd "M-n") 'orin-preview-next-match)
+  (local-set-key (kbd "M-p") 'orin-preview-previous-match)
+  (local-set-key (kbd "<C-down>") 'orin-preview-next-match)
+  (local-set-key (kbd "<C-up>") 'orin-preview-previous-match)
   (add-hook 'after-change-functions 'orin--minibuffer-change nil t))
 
 (defun orin--minibuffer-change (&rest _)
@@ -423,10 +475,7 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
 
   (minibuffer-with-setup-hook
       'orin--minibuffer-setup
-    (let* ((input (read-from-minibuffer
-                   "Search keywords: "
-                   nil
-                   orin--minibuffer-local-map))
+    (let* ((input (read-from-minibuffer "Search keywords: "))
            (keywords (split-string input nil t)))
 
       ;; Clean up preview window
@@ -457,12 +506,15 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
 
     (minibuffer-with-setup-hook
         (lambda ()
+          ;; Bind keys directly in the minibuffer
+          (local-set-key (kbd "C-c C-o") 'orin-toggle-search-mode)
+          (local-set-key (kbd "M-n") 'orin-preview-next-match)
+          (local-set-key (kbd "M-p") 'orin-preview-previous-match)
+          (local-set-key (kbd "<C-down>") 'orin-preview-next-match)
+          (local-set-key (kbd "<C-up>") 'orin-preview-previous-match)
           (add-hook 'after-change-functions 'orin--modern-minibuffer-change nil t))
 
-      (let* ((input (read-from-minibuffer
-                     "Search keywords: "
-                     nil
-                     orin--minibuffer-local-map))
+      (let* ((input (read-from-minibuffer "Search keywords: "))
              (keywords (split-string input nil t)))
 
         ;; Clean up preview window

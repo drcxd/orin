@@ -75,6 +75,13 @@ identical to the result buffer. The interfaces are also identical. The
 only difference is when the user moving cursors between matching
 results, the matching preview buffer is not opened.
 
+While the user is still in the minibuffer inputting keywords, they can
+press `M-n` and `M-p` (or `C-<down>` and `C-<up>`) to navigate between
+matches in the result preview buffer. As they navigate, the matching
+preview buffer updates to show the file content at the selected match
+location. This allows users to browse results without leaving the
+minibuffer or switching windows.
+
 ### Integration with vertico and consult
 
 What we have described above is called the classic operating mode of

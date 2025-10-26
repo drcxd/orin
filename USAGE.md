@@ -69,7 +69,8 @@
    ```
 
 4. **Navigate results**:
-   - Press `n` to move to the next match
+   - While typing: Press `M-n`/`M-p` (or `C-<down>`/`C-<up>`) to browse results in preview buffer
+   - After confirming: Press `n`/`p` to navigate matches
    - Press `RET` to open the file at that location
    - Press `q` to quit
 
@@ -97,11 +98,12 @@ Classic mode uses dedicated Emacs buffers for search input and results display.
 1. Run `M-x orin`
 2. Start typing keywords in the minibuffer
 3. Watch the preview buffer update automatically (appears at bottom)
-4. Press `C-c C-o` to toggle between OR/AND search modes while typing
-5. Press `RET` to confirm and open the full result buffer
-6. Navigate using `n`, `p`, `N`, `P` keys
-7. Press `RET` on a match to open the file
-8. Press `q` to quit
+4. Press `M-n`/`M-p` (or `C-<down>`/`C-<up>`) to navigate through results while still in minibuffer (file preview updates automatically)
+5. Press `C-c C-o` to toggle between OR/AND search modes while typing
+6. Press `RET` to confirm and open the full result buffer
+7. Navigate using `n`, `p`, `N`, `P` keys
+8. Press `RET` on a match to open the file
+9. Press `q` to quit
 
 **Example:**
 ```
@@ -180,6 +182,19 @@ A message will appear: `Search mode: OR` or `Search mode: AND`
 
 ## Navigation
 
+### In the Minibuffer (While Typing Keywords)
+
+| Key | Action |
+|-----|--------|
+| `M-n` | Move to next match in preview buffer (file preview updates) |
+| `M-p` | Move to previous match in preview buffer (file preview updates) |
+| `C-<down>` | Move to next match in preview buffer (alternative) |
+| `C-<up>` | Move to previous match in preview buffer (alternative) |
+| `C-c C-o` | Toggle between OR/AND search modes |
+| `RET` | Confirm search and show full result buffer |
+
+While you're typing keywords in the minibuffer, you can use `M-n` and `M-p` (or `C-<down>` and `C-<up>`) to navigate through the matches shown in the preview buffer. As you navigate, the file preview window automatically updates to show the content at the selected match. This allows you to browse results without leaving the minibuffer or switching windows.
+
 ### In the Result Buffer
 
 | Key | Action |
@@ -221,8 +236,10 @@ Pressing `N` from line 42 would jump to line 12 (first match of next group).
 - Same highlighting as classic mode
 
 **Classic mode (during input):**
-- Preview buffer shows results but doesn't open file previews
-- File previews only appear after confirming and navigating in result buffer
+- Preview buffer shows results as you type
+- Use `M-n`/`M-p` (or `C-<down>`/`C-<up>`) to navigate through results in preview buffer
+- File preview window automatically opens for the first match and updates as you navigate
+- All matching keywords are highlighted in both buffers
 
 ## Customization
 
@@ -348,15 +365,27 @@ Search keywords: budget Q4 2024
 
 This finds only lines containing all three terms.
 
-### 3. Quickly Switch Between Results and Files
+### 3. Preview Results While Typing
 
-In classic mode:
+The most efficient workflow in classic mode:
+1. Start typing keywords
+2. File preview automatically opens for the first match
+3. Use `M-n`/`M-p` (or `C-<down>`/`C-<up>`) to browse through results while still in minibuffer
+4. Watch the file preview update automatically
+5. If you find what you need, press `RET` to open the file
+6. If not, continue refining your keywords
+
+This lets you explore results without committing to the full result buffer.
+
+### 4. Quickly Switch Between Results and Files
+
+In classic mode (after confirming search):
 1. Navigate to interesting matches with `n`/`p`
 2. Press `RET` to open the file
 3. Press `C-x o` to switch back to the result buffer
 4. Continue navigating to other matches
 
-### 4. Organize with #+title:
+### 5. Organize with #+title:
 
 Add `#+title:` to your .org files for better group headers:
 
@@ -369,7 +398,7 @@ Add `#+title:` to your .org files for better group headers:
 
 This shows "My Personal Wiki" instead of "wiki.org" in search results.
 
-### 5. Performance Tuning
+### 6. Performance Tuning
 
 If you have many .org files and search feels slow:
 
@@ -381,7 +410,7 @@ If you have many .org files and search feels slow:
 **Use more specific keywords:**
 Instead of searching for "emacs", search for "emacs workflow configuration"
 
-### 6. Integration with Other Tools
+### 7. Integration with Other Tools
 
 **Capture search results:**
 ```elisp
@@ -406,7 +435,7 @@ Instead of searching for "emacs", search for "emacs workflow configuration"
     (call-interactively 'orin)))
 ```
 
-### 7. Multiple Org Directories
+### 8. Multiple Org Directories
 
 If you have org files in multiple directories, create wrapper functions:
 
@@ -427,7 +456,7 @@ If you have org files in multiple directories, create wrapper functions:
 (global-set-key (kbd "C-c o p") 'orin-personal)
 ```
 
-### 8. Exclude Certain Files
+### 9. Exclude Certain Files
 
 Ripgrep respects `.gitignore` by default. To exclude additional files, create a `.ignore` file in your org directory:
 
@@ -438,19 +467,20 @@ archive/
 scratch.org
 ```
 
-### 9. Case-Sensitive Search
+### 10. Case-Sensitive Search
 
 Currently, orin uses ripgrep's default case sensitivity (smart case). To make searches always case-sensitive, you would need to modify `orin--run-ripgrep` in `orin.el` to add the `--case-sensitive` flag to `rg-args`.
 
-### 10. Keyboard-Driven Workflow
+### 11. Keyboard-Driven Workflow
 
 For maximum efficiency, avoid using the mouse:
 
 1. Bind orin to a convenient key: `(global-set-key (kbd "C-c s") 'orin)`
 2. Type keywords quickly
-3. Use `C-c C-o` to toggle search mode without lifting hands
-4. Navigate with `n`/`p`/`N`/`P`
-5. Open with `RET`, quit with `q`
+3. Use `M-n`/`M-p` (or `C-<down>`/`C-<up>`) to browse results while typing
+4. Use `C-c C-o` to toggle search mode without lifting hands
+5. Navigate with `n`/`p`/`N`/`P` in result buffer
+6. Open with `RET`, quit with `q`
 
 ## Troubleshooting
 
