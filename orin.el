@@ -359,8 +359,9 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
     (unless (window-live-p orin--preview-window)
       (setq orin--preview-window
             (display-buffer preview-buffer
-                          '((display-buffer-at-bottom)
-                            (window-height . 0.4)))))
+                          '((display-buffer-in-side-window)
+                            (side . right)
+                            (window-width . 0.5)))))
 
     (with-selected-window orin--preview-window
       (switch-to-buffer preview-buffer)
