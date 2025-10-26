@@ -128,6 +128,7 @@ Returns a list of plists with :file, :line, :column, and :text keys."
                        "--column"
                        "--no-heading"
                        "--color=never"
+                       "--smart-case"
                        "--glob=*.org"
                        "--"
                        pattern

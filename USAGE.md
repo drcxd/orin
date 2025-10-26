@@ -474,9 +474,15 @@ archive/
 scratch.org
 ```
 
-### 10. Case-Sensitive Search
+### 10. Smart Case Search
 
-Currently, orin uses ripgrep's default case sensitivity (smart case). To make searches always case-sensitive, you would need to modify `orin--run-ripgrep` in `orin.el` to add the `--case-sensitive` flag to `rg-args`.
+Orin uses ripgrep's smart-case mode by default:
+- **Lowercase keywords**: Match case-insensitively (e.g., "emacs" matches "emacs", "Emacs", "EMACS")
+- **Mixed case keywords**: Match case-sensitively (e.g., "Emacs" only matches "Emacs")
+
+To make searches always case-sensitive, you would need to modify `orin--run-ripgrep` in `orin.el` to change `--smart-case` to `--case-sensitive`.
+
+To make searches always case-insensitive, change `--smart-case` to `--ignore-case` or `-i`.
 
 ### 11. Keyboard-Driven Workflow
 
