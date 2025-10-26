@@ -217,7 +217,7 @@ While you're typing keywords in the minibuffer, you can use `M-n` and `M-p` (or 
 
 Results are grouped by file. Each group shows:
 - **Group header**: The file's `#+title:` property (for .org files) or filename
-- **Matches**: Indented list showing line number and matching text
+- **Matches**: Indented list showing line number and matching text, sorted by line number in ascending order
 
 **Example:**
 ```

@@ -28,7 +28,8 @@ refer to this buffer as the result buffer from now on.
 
 In the results buffer, the matching results are grouped by files. Each
 group consists of a line of the group name and several lines for the
-matching results. The group name is usually the name of the
+matching results. Within each group, results are sorted by line number
+in ascending order. The group name is usually the name of the
 file. However, if the filename ends with `.org`, and it contains
 `#+title: ` line in it, use this title property as the name of the
 group.
@@ -65,6 +66,9 @@ Since we may have multiple keywords, we support logical OR or logical
 AND of these keywords as different searching mode. The searching mode
 is logical OR by default. But the user can press `C-c C-o` to toggle
 between logical OR and logical AND when inputting the keywords.
+
+Searching uses ripgrep's smart-case mode: lowercase keywords match
+case-insensitively, while mixed-case keywords match case-sensitively.
 
 ### Preview of the Searching Results
 

@@ -17,12 +17,18 @@
 ;; - Modern mode: Integrated with vertico for dynamic completion
 ;;
 ;; Features:
-;; - Fast ripgrep-based searching
+;; - Fast ripgrep-based searching with smart-case matching
 ;; - OR/AND search modes (toggle with C-c C-o)
 ;; - Live preview of search results
 ;; - Group results by file with #+title: extraction
+;; - Results sorted by line number within each file
 ;; - Navigate between matches and groups
 ;; - Preview files with keyword highlighting
+;; - Debounced search for better performance
+;;
+;; Usage:
+;; Set `orin-dir' to your org files directory, then run M-x orin.
+;; See USAGE.md for detailed documentation.
 
 ;;; Code:
 
@@ -159,8 +165,8 @@ Returns a list of plists with :file, :line, :column, and :text keys."
       (nreverse results))))
 
 (defun orin--group-results (results)
-  "Group RESULTS by file.
-Returns an alist of (file . results) where results are plists."
+  "Group RESULTS by file and sort by line number within each group.
+Returns an alist of (file . results) where results are plists sorted by line."
   (let ((groups '()))
     (dolist (result results)
       (let* ((file (plist-get result :file))
@@ -168,7 +174,14 @@ Returns an alist of (file . results) where results are plists."
         (if group
             (setcdr group (append (cdr group) (list result)))
           (push (cons file (list result)) groups))))
-    (nreverse groups)))
+    ;; Sort results within each group by line number
+    (mapcar (lambda (group)
+              (cons (car group)
+                    (sort (copy-sequence (cdr group))
+                          (lambda (a b)
+                            (< (plist-get a :line)
+                               (plist-get b :line))))))
+            (nreverse groups))))
 
 ;;; Result Buffer Mode
 
@@ -417,8 +430,9 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
         ;; Clear vertico's internal state
         (when (boundp 'vertico--input)
           (setq vertico--input t))  ; Set to non-string to invalidate cache
-        ;; Trigger vertico to update
-        (when (fboundp 'vertico--exhibit)
+        ;; Trigger vertico to update only if it's properly initialized
+        (when (and (fboundp 'vertico--exhibit)
+                   (boundp 'vertico--candidates))
           (vertico--exhibit)))
     ;; In classic mode, update the preview buffer
     (orin--schedule-preview-update)))
@@ -565,7 +579,8 @@ Return group title for CAND or TRANSFORM the candidate."
           (lambda (string pred action)
             (if (eq action 'metadata)
                 '(metadata (category . orin-match)
-                          (group-function . orin--group-function))
+                          (group-function . orin--group-function)
+                          (display-sort-function . identity))
               ;; Update candidates when input or mode changes
               (let ((keywords (split-string string nil t)))
                 (when (and keywords
@@ -669,8 +684,17 @@ The group title will be shown separately by the group function."
 
 ;;;###autoload
 (defun orin ()
-  "Search for keywords in org files.
-The operating mode is controlled by `orin-operating-mode'."
+  "Search for keywords in org files using ripgrep.
+
+Enter space-separated keywords to search. Results are grouped by file
+and sorted by line number. Press C-c C-o to toggle between OR and AND
+search modes.
+
+The operating mode is controlled by `orin-operating-mode':
+- \\='classic: Uses dedicated buffers with live preview
+- \\='modern: Integrates with vertico for dynamic completion
+
+Results are searched in `orin-dir' directory."
   (interactive)
   (if (eq orin-operating-mode 'modern)
       (call-interactively 'orin--modern-search)
