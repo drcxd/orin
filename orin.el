@@ -494,77 +494,21 @@ Also updates the file preview window."
 
 ;;; Modern Mode Implementation (vertico/consult integration)
 
+(defvar orin--modern-preview-overlay nil
+  "Overlay for showing preview in modern mode.")
+
+(declare-function vertico--candidate "ext:vertico")
+(defvar vertico--input)
+(defvar vertico--candidates)
+(defvar vertico--index)
+
 (defun orin--modern-search ()
-  "Perform search in modern mode using vertico."
-  (if (not (require 'consult nil t))
-      (progn
-        (message "Modern mode requires consult package. Falling back to classic mode.")
-        (orin--classic-search))
-
-    (setq orin--search-mode 'or)
-    (setq orin--preview-window nil)
-
-    (minibuffer-with-setup-hook
-        (lambda ()
-          ;; Bind keys directly in the minibuffer
-          (local-set-key (kbd "C-c C-o") 'orin-toggle-search-mode)
-          (local-set-key (kbd "M-n") 'orin-preview-next-match)
-          (local-set-key (kbd "M-p") 'orin-preview-previous-match)
-          (local-set-key (kbd "<C-down>") 'orin-preview-next-match)
-          (local-set-key (kbd "<C-up>") 'orin-preview-previous-match)
-          (add-hook 'after-change-functions 'orin--modern-minibuffer-change nil t))
-
-      (let* ((input (read-from-minibuffer "Search keywords: "))
-             (keywords (split-string input nil t)))
-
-        ;; Clean up preview window
-        (when (window-live-p orin--preview-window)
-          (delete-window orin--preview-window)
-          (setq orin--preview-window nil))
-        (when (get-buffer "*orin-preview*")
-          (kill-buffer "*orin-preview*"))
-
-        (when keywords
-          (setq orin--current-keywords keywords)
-          (let ((results (orin--run-ripgrep keywords orin--search-mode)))
-            (when results
-              (orin--vertico-select results))))))))
-
-(defun orin--modern-minibuffer-change (&rest _)
-  "Handle changes in minibuffer for modern mode."
-  (orin--schedule-preview-update))
-
-(defun orin--vertico-select (results)
-  "Use vertico to select from RESULTS."
-  (let* ((groups (orin--group-results results))
-         (candidates '())
-         (match-map (make-hash-table :test 'equal)))
-
-    ;; Build candidates list with group headers
-    (dolist (group groups)
-      (let ((matches (cdr group))
-            (title (orin--get-file-title (car group))))
-        ;; Add group header
-        (push (propertize title 'face 'orin-group-name-face) candidates)
-
-        ;; Add matches
-        (dolist (match matches)
-          (let* ((line (plist-get match :line))
-                 (text (plist-get match :text))
-                 (cand (format "  %4d: %s" line text)))
-            (push cand candidates)
-            (puthash cand match match-map)))))
-
-    (setq candidates (nreverse candidates))
-
-    ;; Use completing-read with preview
-    (let ((selected
-           (completing-read "Select match: " candidates nil t nil nil)))
-
-      (when (window-live-p orin--preview-window)
-        (delete-window orin--preview-window))
-
-      (let ((match (gethash selected match-map)))
+  "Perform search in modern mode using vertico.
+Search happens dynamically as you type."
+  (interactive)
+  (let ((selected (orin--dynamic-completing-read)))
+    (when selected
+      (let ((match (get-text-property 0 'orin-match selected)))
         (when match
           (let ((file (plist-get match :file))
                 (line (plist-get match :line)))
@@ -572,6 +516,99 @@ Also updates the file preview window."
             (goto-char (point-min))
             (forward-line (1- line))
             (recenter)))))))
+
+(defvar orin--dynamic-candidates nil
+  "Cached candidates for dynamic completion.")
+
+(defvar orin--dynamic-last-input nil
+  "Last input string for dynamic completion.")
+
+(defun orin--group-function (cand transform)
+  "Group function for orin candidates.
+Return group title for CAND or TRANSFORM the candidate."
+  (if transform
+      cand  ; Return candidate as-is when transforming
+    (get-text-property 0 'orin-group cand)))  ; Return group title
+
+(defun orin--dynamic-completing-read ()
+  "Dynamic completing-read that searches as you type."
+  (let* ((collection
+          (lambda (string pred action)
+            (if (eq action 'metadata)
+                '(metadata (category . orin-match)
+                          (group-function . orin--group-function))
+              ;; Update candidates when input changes
+              (let ((keywords (split-string string nil t)))
+                (when (and keywords
+                          (not (equal string orin--dynamic-last-input)))
+                  (setq orin--dynamic-last-input string)
+                  (setq orin--current-keywords keywords)
+                  (let* ((results (orin--run-ripgrep keywords 'or))
+                         (groups (orin--group-results results))
+                         (candidates '()))
+                    (dolist (group groups)
+                      (let ((matches (cdr group))
+                            (title (orin--get-file-title (car group))))
+                        (dolist (match matches)
+                          (let ((cand (orin--format-match-for-completion-grouped match)))
+                            ;; Store group title as property
+                            (put-text-property 0 (length cand) 'orin-group title cand)
+                            ;; Store match data as property
+                            (put-text-property 0 (length cand) 'orin-match match cand)
+                            (push cand candidates)))))
+                    (setq orin--dynamic-candidates (nreverse candidates))))
+                ;; Return candidates for completion
+                (complete-with-action action orin--dynamic-candidates string pred))))))
+
+    (setq orin--dynamic-last-input nil)
+    (setq orin--dynamic-candidates nil)
+
+    (unwind-protect
+        (progn
+          (advice-add 'vertico--exhibit :after #'orin--vertico-preview-update)
+          (completing-read "Search (type keywords): " collection nil t))
+      (advice-remove 'vertico--exhibit #'orin--vertico-preview-update)
+      (when (window-live-p orin--preview-window)
+        (delete-window orin--preview-window)
+        (setq orin--preview-window nil))
+      (when (get-buffer "*orin-preview*")
+        (kill-buffer "*orin-preview*")))))
+
+(defun orin--format-match-for-completion (match group-title)
+  "Format MATCH with GROUP-TITLE for display in completion."
+  (let ((line (plist-get match :line))
+        (text (plist-get match :text)))
+    (format "%-30s %4d: %s"
+            (truncate-string-to-width group-title 30 nil nil t)
+            line
+            text)))
+
+(defun orin--format-match-for-completion-grouped (match)
+  "Format MATCH for grouped completion (without group title).
+The group title will be shown separately by the group function."
+  (let ((line (plist-get match :line))
+        (text (plist-get match :text)))
+    (format "%4d: %s" line text)))
+
+(defun orin--vertico-preview-function (cand)
+  "Show preview for candidate CAND in vertico."
+  (when cand
+    (let ((match (get-text-property 0 'orin-match cand)))
+      (when match
+        (orin--show-preview match)))))
+
+
+(defun orin--vertico-preview-update (&rest _)
+  "Update preview based on current vertico candidate."
+  (when (minibufferp)
+    (when-let* ((cand (and (boundp 'vertico--input)
+                          (boundp 'vertico--candidates)
+                          (boundp 'vertico--index)
+                          vertico--candidates
+                          (>= vertico--index 0)
+                          (< vertico--index (length vertico--candidates))
+                          (nth vertico--index vertico--candidates))))
+      (orin--vertico-preview-function cand))))
 
 ;;; Main Entry Point
 
@@ -581,7 +618,7 @@ Also updates the file preview window."
 The operating mode is controlled by `orin-operating-mode'."
   (interactive)
   (if (eq orin-operating-mode 'modern)
-      (orin--modern-search)
+      (call-interactively 'orin--modern-search)
     (orin--classic-search)))
 
 (provide 'orin)
