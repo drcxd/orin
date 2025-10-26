@@ -2,17 +2,17 @@
 
 ;; Copyright (C) 2025
 
-;; Author: Your Name
+;; Author: Claude and drcxd
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "27.1"))
 ;; Keywords: convenience, org, search
-;; URL: https://github.com/yourusername/orin
+;; URL: https://github.com/drcxd/orin
 
 ;;; Commentary:
 
 ;; orin (ORg INsight) helps you search information in .org files using
 ;; ripgrep. It provides two operating modes: classic mode with dedicated
-;; buffers, and modern mode integrated with vertico and consult.
+;; buffers, and modern mode integrated with vertico.
 
 ;;; Code:
 
@@ -82,6 +82,18 @@ This prevents searching on every keystroke for better performance."
 
 (defvar orin--search-results nil
   "Cached search results as a list of plists.")
+
+(defvar orin--dynamic-candidates nil
+  "Cached candidates for dynamic completion.")
+
+(defvar orin--dynamic-last-input nil
+  "Last input string for dynamic completion.")
+
+(defvar orin--dynamic-last-mode nil
+  "Last search mode used for dynamic completion.")
+
+(defvar orin--force-refresh nil
+  "Flag to force refresh of completion candidates even if input unchanged.")
 
 ;;; Utility Functions
 
@@ -389,7 +401,19 @@ If PREVIEW-MODE is non-nil, don't enable preview on cursor movement."
   (interactive)
   (setq orin--search-mode (if (eq orin--search-mode 'or) 'and 'or))
   (message "Search mode: %s" (upcase (symbol-name orin--search-mode)))
-  (orin--schedule-preview-update))
+  (if (eq orin-operating-mode 'modern)
+      ;; In modern mode, clear vertico's cache and force update
+      (when (minibufferp)
+        ;; Reset the last-mode to force recomputation
+        (setq orin--dynamic-last-mode nil)
+        ;; Clear vertico's internal state
+        (when (boundp 'vertico--input)
+          (setq vertico--input t))  ; Set to non-string to invalidate cache
+        ;; Trigger vertico to update
+        (when (fboundp 'vertico--exhibit)
+          (vertico--exhibit)))
+    ;; In classic mode, update the preview buffer
+    (orin--schedule-preview-update)))
 
 (defun orin-preview-next-match ()
   "Move to next match in preview results buffer from minibuffer."
@@ -493,7 +517,7 @@ Also updates the file preview window."
           (orin--render-results result-buffer results)
           (pop-to-buffer result-buffer))))))
 
-;;; Modern Mode Implementation (vertico/consult integration)
+;;; Modern Mode Implementation (vertico integration)
 
 (defvar orin--modern-preview-overlay nil
   "Overlay for showing preview in modern mode.")
@@ -507,22 +531,21 @@ Also updates the file preview window."
   "Perform search in modern mode using vertico.
 Search happens dynamically as you type."
   (interactive)
+  (setq orin--search-mode 'or)  ; Initialize to OR mode
   (let ((selected (orin--dynamic-completing-read)))
-    (when selected
-      (let ((match (get-text-property 0 'orin-match selected)))
-        (when match
-          (let ((file (plist-get match :file))
-                (line (plist-get match :line)))
-            (find-file-other-window file)
-            (goto-char (point-min))
-            (forward-line (1- line))
-            (recenter)))))))
-
-(defvar orin--dynamic-candidates nil
-  "Cached candidates for dynamic completion.")
-
-(defvar orin--dynamic-last-input nil
-  "Last input string for dynamic completion.")
+    (when (and selected (not (string-empty-p selected)))
+      ;; Find the actual candidate with text properties from our cache
+      (let* ((candidate (or (cl-find selected orin--dynamic-candidates :test #'equal)
+                           selected))
+             (match (get-text-property 0 'orin-match candidate)))
+        (if match
+            (let ((file (plist-get match :file))
+                  (line (plist-get match :line)))
+              (find-file-other-window file)
+              (goto-char (point-min))
+              (forward-line (1- line))
+              (recenter))
+          (message "Error: No match data found for selected candidate"))))))
 
 (defun orin--group-function (cand transform)
   "Group function for orin candidates.
@@ -538,13 +561,17 @@ Return group title for CAND or TRANSFORM the candidate."
             (if (eq action 'metadata)
                 '(metadata (category . orin-match)
                           (group-function . orin--group-function))
-              ;; Update candidates when input changes
+              ;; Update candidates when input changes, mode changes, or force-refresh is set
               (let ((keywords (split-string string nil t)))
                 (when (and keywords
-                          (not (equal string orin--dynamic-last-input)))
+                          (or orin--force-refresh
+                              (not (equal string orin--dynamic-last-input))
+                              (not (eq orin--search-mode orin--dynamic-last-mode))))
                   (setq orin--dynamic-last-input string)
+                  (setq orin--dynamic-last-mode orin--search-mode)
                   (setq orin--current-keywords keywords)
-                  (let* ((results (orin--run-ripgrep keywords 'or))
+                  (setq orin--force-refresh nil)  ; Clear the flag after using it
+                  (let* ((results (orin--run-ripgrep keywords orin--search-mode))
                          (groups (orin--group-results results))
                          (candidates '()))
                     (dolist (group groups)
@@ -558,16 +585,41 @@ Return group title for CAND or TRANSFORM the candidate."
                             (put-text-property 0 (length cand) 'orin-match match cand)
                             (push cand candidates)))))
                     (setq orin--dynamic-candidates (nreverse candidates))))
-                ;; Return candidates for completion
-                (complete-with-action action orin--dynamic-candidates string pred))))))
+                ;; Handle completion actions explicitly to bypass default filtering
+                (cond
+                 ((eq action nil)  ; try-completion
+                  ;; For try-completion, find exact match or return t if complete
+                  (cond
+                   ((null orin--dynamic-candidates) nil)
+                   ((member string orin--dynamic-candidates)
+                    ;; Exact match found - return t to indicate completion is complete
+                    t)
+                   (t
+                    ;; Return first candidate as default
+                    (car orin--dynamic-candidates))))
+                 ((eq action t)    ; all-completions
+                  ;; Return all candidates without filtering
+                  orin--dynamic-candidates)
+                 ((eq action 'lambda)  ; test-completion
+                  ;; Test if string is a valid completion
+                  (and (member string orin--dynamic-candidates) t))
+                 (t
+                  ;; Fall back to default for other actions
+                  (complete-with-action action orin--dynamic-candidates string pred))))))))
 
     (setq orin--dynamic-last-input nil)
+    (setq orin--dynamic-last-mode nil)
     (setq orin--dynamic-candidates nil)
+    (setq orin--force-refresh nil)
 
     (unwind-protect
         (progn
           (advice-add 'vertico--exhibit :after #'orin--vertico-preview-update)
-          (completing-read "Search (type keywords): " collection nil t))
+          (minibuffer-with-setup-hook
+              (lambda ()
+                ;; Only set up the toggle key for modern mode
+                (local-set-key (kbd "C-c C-o") 'orin-toggle-search-mode))
+            (completing-read "Search (type keywords): " collection nil t)))
       (advice-remove 'vertico--exhibit #'orin--vertico-preview-update)
       (when (window-live-p orin--preview-window)
         (delete-window orin--preview-window)
